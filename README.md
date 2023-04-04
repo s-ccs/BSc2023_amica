@@ -1,18 +1,22 @@
-# **MSc-Thesis:** On the simulation of GIT-Templates for BSc-Theses
-**Author:** *Benedikt Ehinger*
+# **MSc-Thesis:** Implementation of AMICA in Julia
+**Author:** *Alexander Lulkin*
 
-**Supervisor(s):** *Supervisor 1*, *Supervisor 2*
+**Supervisor(s):** *Benedikt Ehinger*
 
-**Year:** *2022*
+**Year:** *2023*
 
 ## Project Description
->provide a short description of the main goals - just copy from the proposal
+>Independent Component Analysis is commonly used on electroencephalography data for blind source separation. Various ICA
+algorithms exist, among them Adaptive Mixture Independent Component Analysis. AMICA is widely used in EEG due to being one of the best
+performing ICA algorithms. However, the current implementations are not transparent and not perfectly suited for further development. This
+thesis aims to produce an implementation in the scientific programming language Julia. The implementation will feature a modular structure,
+which will make it easy to replace certain components of the algorithm to find better performing variations.
 
 ## Zotero Library Path
->Please provide the link to the Zotero group here or include a `Bib`-File in the `report` folder
+>TODO: Please provide the link to the Zotero group here or include a `Bib`-File in the `report` folder
 
 ## Instruction for a new student
->If a fellow student wants to reproduce all your results. What scripts, in which order, with which data need to be run?
+>TODO: If a fellow student wants to reproduce all your results. What scripts, in which order, with which data need to be run?
 >
 >Be as specific as possible. Plan to spend **at least 1h** on this.
 >
