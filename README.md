@@ -1,4 +1,4 @@
-# **MSc-Thesis:** Implementation of AMICA in Julia
+# **BSc-Thesis:** Implementation of AMICA in Julia
 **Author:** *Alexander Lulkin*
 
 **Supervisor(s):** *Benedikt Ehinger*
