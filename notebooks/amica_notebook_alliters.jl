@@ -65,27 +65,267 @@ function ffun(x,rho) #taken from amica.m
 	return rho * sign.(x) .* abs.(x) .^(rho-1)
 end
 
-# ╔═╡ e26a13cc-d53c-4156-bd58-3cca3c9547a8
-#Inputs
+# ╔═╡ e60acb65-5b7a-485f-8841-aee61beecaf3
+# calculate loglikelihood for each sample in vector x, given a parameterization of a mixture of PGeneralizedGaussians
+function loglikelihoodMMGG(μ::AbstractVector,α::AbstractVector,ρ::AbstractVector,x::AbstractVector,π::AbstractVector)
+	# take the vectors of μ,α,ρ and generate a GG from each
+    GGvec = PGeneralizedGaussian.(μ,α,ρ)
+    MM = MixtureModel(GGvec,Vector(π)) # make it a mixture model with prior probabilities π
+    return loglikelihood.(MM,x) # apply the loglikelihood to each sample individually (note the "." infront of .(MM,x))
+end
+
+# ╔═╡ 6e2833c2-f2ff-41fe-bf0f-9aabb377ea0e
+loglikelihoodMMGG.(eachcol(mu[:,:,1]),eachcol(beta[:,:,1]),eachcol(rho[:,:,1]),eachrow(b[:,:,1]),eachcol(alpha[:,:,1]))
+
+# ╔═╡ f8a70a95-1ab7-4dca-8363-b6b8e6a67bb2
+# #calculate z (which is u at first) lines 202 - 218, probably unnessary
+				#if M > 1 && m > 1
+function calculate_z_y(m,n,beta,mu,alpha,rho,h,b,y,Q,z)
+	for i in 1:n
+		for j in 1:m
+			y[i,:,j,h] = sqrt(beta[j,i,h]) * (b[i,:,h] .- mu[j,i,h])
+			Q[j,:] .= log(alpha[j,i,h]) + 0.5*log(beta[j,i,h]) .+ logpfun(y[i,:,j,h],rho[j,i,h])
+		end
+		if m > 1
+			#hier ist eig. noch berechnung von Qmax und Lt
+			for j in 1:m
+				Qj = ones(m,1) .* Q[j,:]'
+				z[i,:,j,h] = 1 ./ sum(exp.(Q-Qj),dims = 1)
+			end
+		end
+	end
+	return z, y
+end
+
+# ╔═╡ 663eb494-00e9-436b-a832-29461b536b66
+#iteratively optimize parameters using EM
+	#for iter in 1:1 #todo: zurück auf 1:maxiter setzen
+		#get y, Q, Lt, u (u is named z since z overwrites it later)
+		#for h in 1:M 
+function get_sources!(b,A,x,h,M,n)
+	if M == 1
+		b = pinv(A[:,:,h]) * x
+	end
+	for i in 1:n 
+		if M > 1
+			Wh = pinv(A[:,:,h])
+			b[i,:,h] .= Wh[i,:]' * x #musste transponiert werden
+		end
+	end
+	return b
+end
+
+# ╔═╡ 95c80f54-f2e6-45bb-8842-3e7c3cbb7b7d
+#calculate lrate (243 - 260)
+function calculate_lrate(dLL, lrate, lratefact, lnatrate, lratemax, mindll, iter, newt_start_iter, do_newton, iterwin)
+		sdll = sum(dLL[iter-iterwin+1:iter])/iterwin
+		if (sdll > 0) && (sdll < mindll)
+			return -1
+		end
+		if sdll < 0
+			println("Likelihood decreasing!")
+			lrate = lrate * lratefact
+		else
+			#lrate über zeit nochmal anschauen. wird sie größer??
+			if (iter > newt_start_iter) && do_newton == 1
+				lrate = min(lratemax,lrate + min(0.1,lrate))
+			else
+				lrate = min(lnatrate,lrate + min(0.1,lrate))
+			end
+		end
+	return lrate
+end
+
+# ╔═╡ 94c5a1bf-b737-4bd3-8199-1385abcd7ca2
+function update_parameters_and_other_stuff(iter, vsum, h, M, N, m, n, Lt, fp, z, alpha, beta, kappa, lambda, mu, rho, rhomin, rhomax, update_rho, y, g, rholrate)
+	#it doesnt need iter, just there for test purposes
+	if M > 1 #todo: testen
+		Lh = ones(M,N)
+		for i in 1:M
+			Lh[i,:] = Lt[h,:]
+		end
+		v[h,:] = 1 ./ sum(exp.(Lt-Lh),dims=1)
+		vsum[h] = sum(v[h,:])
+		gm[h] = vsum[h] / N
+	
+		if gm[h] == 0
+			#continue
+		end
+	end
+	#g = zeros(n,N)
+	#kappa = zeros(n,1)
+	eta = zeros(n,1)
+	#sigma2 = zeros(n,1)
+	
+	
+	#eigentlich in loop deklariert:
+	zfp = zeros(m, N)
+	
+	for i in 1:n
+		for j in 1:m
+			sumz = 0
+			if M > 1 #todo: testen
+				if m > 1
+					z[i,:,j,h] .= v[h,:] .* z[i,:,j,h]
+					sumz = sum(z[i,:,j,h])
+					alpha[j,i,h] = sumz / vsum[h]
+				else
+					z[i,:,j,h] = v[h,:]
+					sumz = sum(z[i,:,j,h])
+				end
+			else
+				if m > 1
+					sumz = sum(z[i,:,j,h])
+					alpha[j,i,h] = sumz / N
+				else
+					sumz = N
+				end
+			end
+	
+			if sumz > 0
+				if (M > 1) | (m > 1)
+					z[i,:,j,h] .= z[i,:,j,h] / sumz
+				end
+			else
+				continue
+			end
+			#line 311
+			fp[j,:] = ffun(y[i,:,j,h], rho[j,i,h])
+			zfp[j,:] = z[i,:,j,h] .* fp[j,:]
+			
+			g[i,:] = g[i,:] .+alpha[j,i,h] .*sqrt(beta[j,i,h]) .*zfp[j,:]
+	
+			kp = beta[j,i,h] .* sum(zfp[j,:].*fp[j,:])
+	
+			kappa[i] = kappa[i]  + alpha[j,i,h] * kp
+	
+			lambda[i] = lambda[i] + alpha[j,i,h] * (sum(z[i,:,j,h].*(fp[j,:].*y[i,:,j,h] .-1).^2) + mu[j,i,h]^2 * kp)
+	
+			if rho[j,i,h] <= 2
+				if (m > 1) | (M > 1)
+					dm = sum(zfp[j,:]./y[i,:,j,h])
+					if dm > 0
+						mu[j,i,h] = mu[j,i,h] + (1/sqrt(beta[j,i,h])) * sum(zfp[j,:]) / dm
+					end
+				end
+	
+				db = sum(zfp[j,:].*y[i,:,j,h])
+				if db > 0
+					beta[j,i,h] = beta[j,i,h] / db
+				end
+			else #todo: noch überprüfen, tritt bei erster iteration nicht ein
+				if (m > 1) | (M > 1)
+					if kp > 0
+						mu[j,i,h] = mu[j,i,h] + sqrt(beta[j,i,h]) * sum(zfp[j,:]) / kp #only difference is sqrt instead of 1/sqrt
+					end
+				end
+				db = (rho[j,i,h] * sum(z[i,:,j,h].*abs.(y[i,:,j,h]).^rho[j,i,h]))^(-2 / rho[j,i,h])
+				beta[j,i,h] = beta[j,i,h] * db
+			end
+	
+			if update_rho == 1
+				ytmp = abs.(y[i,:,j,h]).^rho[j,i,h]
+				dr = sum(z[i,:,j,h].*log.(ytmp).*ytmp)
+	
+				#todo: dieses if testen, wird bei ersten iteration nicht ausgeführt
+				if rho[j,i,h] > 2
+					dr2 = digamma(1+1/rho[j,i,h]) / rho[j,i,h] - dr
+					if ~isnan(dr2) #todo: testen
+						rho[j,i,h] = rho[j,i,h] + 0.5 * dr2
+					end
+				else
+					dr2 = 1 - rho[j,i,h] * dr / digamma(1+1/rho[j,i,h])
+					if ~isnan(dr2) #todo: testen
+						rho[j,i,h] = rho[j,i,h] + rholrate *dr2
+					end
+				end
+				rho[j,i,h] = min(rhomax, rho[j,i,h])
+				rho[j,i,h] = max(rhomin, rho[j,i,h])
+			end
+		end
+	end
+	return g, vsum, z, alpha, beta, kappa, lambda, mu, rho
+end
+
+# ╔═╡ 7c745a97-a774-4cd6-b4fb-752155beb46a
 begin
-	x = [1 4; 4 1]*Float64.([1 2 3 4 5 6; 7 8 9 10 11 12])
-	M = 1 #number of mixture models
-	m = 3 #number of source density mixtures
-	maxiter = 10 #max iterations
-	update_rho = 1
-	mindll = 1e-8
-	iterwin = 1 #default should be 50?
-	do_newton = 1
-	remove_mean = 1
+	sigmatest = [0 0]
+	sigmatest = sum([1 2; 3 4].^2,dims=2) / 6
+end
+
+# ╔═╡ e5c496b0-e1a1-414a-a4ae-ec74617931b2
+function newton_method(M, A, vsum, h, iter, b, n, g, kappa, do_newton, newt_start_iter, lrate, lnatrate, N, sigma2, lambda)
+	if M > 1 #todo:testen
+		sigma2 = b[:,:,h].^2 * v[h,:]'/vsum(h)
+	else
+		sigma2 = sum(b.^2,dims=2) / N
+	end
+	dA = Matrix{Float64}(I, n, n) - g * b[:,:,h]' 
+	bflag = 0
+	# if iter == 55
+	# 	@show g
+	# 	@show b
+	# end
+	#eig. in loop deklariert
+	B = zeros(n,n)
+	
+	for i in 1:n
+		for k = 1:n
+			if i == k
+				B[i,i] = dA[i,i] / (-0*dA[i,i] + lambda[i])#*0?? wtf??
+			else
+				denom = kappa[i]*kappa[k]*sigma2[i]*sigma2[k] - 1
+				if denom > 0
+					B[i,k] = (-kappa[k] * sigma2[i] * dA[i,k] + dA[k,i]) / denom
+				else
+					bflag = 1
+				end
+			end
+		end		
+	end
+	if (bflag == 0) && (do_newton == 1) && (iter > newt_start_iter)
+		A[:,:,h] = A[:,:,h] + lrate * A[:,:,h] * B
+	else
+		A[:,:,h] = A[:,:,h] - lnatrate * A[:,:,h] * dA
+	end
+	return A
+end
+
+# ╔═╡ b3637deb-985f-4fea-bf99-d956ad4a2877
+function reparameterize(A, x, M, mu, beta, v, c, gm, n)
+	for h in 1:M
+		if gm[h] == 0 #todo:  das auch wieder einfügen
+			#continue
+		end
+		for i in 1:n
+			tau = norm(A[:,i,h])
+			A[:,i,h] = A[:,i,h] / tau
+			mu[:,i,h] = mu[:,i,h] * tau
+			beta[:,i,h] = beta[:,i,h] / tau^2
+		end
+	
+		if M > 1 #todo: testen
+			cnew = x * v[h,:]'/(sum(v[h,:]))
+			for i in 1:n
+				Wh = pinv(A[:,:,h])
+				mu[:,i,h] = mu[:,i,h] - Wh[i,:]*(cnew-c[:,h])
+			end
+			c[:,h] = cnew
+		end
+	end
+	return A, mu, beta, c
+end
+
+# ╔═╡ a50d8c62-3cfb-41e6-9739-b1a251c34430
+function amica(x, M, m, maxiter, update_rho, mindll, iterwin, do_newton, remove_mean)
 	#As
 	#cs
-
-#Variables
+	#Variables
 	(n, N) = size(x)
 	lrate0 = 0.1
 	lratemax = 1.0
 	lnatrate = 0.1
-	newt_start_iter = 25
+	newt_start_iter = 1 #eig. 25
 	lratefact = 0.5
 
 	lrate = lrate0
@@ -110,20 +350,7 @@ begin
 	if remove_mean == 1
 		removeMean(x)
 	end
-end
-
-# ╔═╡ e60acb65-5b7a-485f-8841-aee61beecaf3
-# calculate loglikelihood for each sample in vector x, given a parameterization of a mixture of PGeneralizedGaussians
-function loglikelihoodMMGG(μ::AbstractVector,α::AbstractVector,ρ::AbstractVector,x::AbstractVector,π::AbstractVector)
-	# take the vectors of μ,α,ρ and generate a GG from each
-    GGvec = PGeneralizedGaussian.(μ,α,ρ)
-    MM = MixtureModel(GGvec,Vector(π)) # make it a mixture model with prior probabilities π
-    return loglikelihood.(MM,x) # apply the loglikelihood to each sample individually (note the "." infront of .(MM,x))
-end
-
-# ╔═╡ 89920839-8a9e-49d4-b34b-d86dcc2a404b
-begin
-#initialize parameters
+	#initialize parameters
 	A = zeros(n,n,M)
 	c = zeros(n,M)
 	eye = Matrix{Float64}(I, n, n)
@@ -151,7 +378,7 @@ begin
 	beta = [1.1 0.9; 1.0 0.9; 0.9 0.8]
 	rho = rho0 * ones(m, n, M)
 
-#initialize variables
+	#initialize variables
 	a = 0
 	g = zeros(n,N)
 	
@@ -174,404 +401,103 @@ begin
 	ldet = zeros(M)
 	dLL = zeros(1,maxiter)
 	b = zeros(n,N,M)
+
+	counter = 0
+	for iter in 1:maxiter
+		for h in 1:M
+			ldet[h] =  -log(abs(det(A[:,:,h]))) #todo: in die get_ll funktion stecken
+			Lt[h,:] .= log(gm[h]) + ldet[h] #todo: same
+			b .= get_sources!(b,A,x,h,M,n)
+			#Lt[iter,:] = get_likelihood_time(A, gm, mu, beta, rho, alpha, b, h)
+			#Lt[1,:] = [-84.2453 -40.6495 -9.3180 -7.9679 -38.9525 -83.2213]
+			Lt[h,:] = sum(loglikelihoodMMGG.(eachcol(mu[:,:,h]),eachcol(beta[:,:,h]),eachcol(rho[:,:,h]),eachrow(b[:,:,h]),eachcol(alpha[:,:,h])))
+			LL[iter] = calculate_LL(Lt, M, N, n)
 	
-	iter = 1
-	h = 1
+			z, y = calculate_z_y(m,n,beta,mu,alpha,rho,h,b,y,Q,z)
+		end
+		if iter > 1
+			dLL[iter] = LL[iter] - LL[iter-1]
+		end
+		if iter > iterwin +1 #todo:testen
+			lrate = calculate_lrate(dLL, lrate, lratefact, lnatrate,lratemax,mindll,iter,newt_start_iter,do_newton, iterwin)
+			#lrate < 0 ? break : ""
+			sdll = sum(dLL[iter-iterwin+1:iter])/iterwin
+			if (sdll > 0) && (sdll < mindll)
+				counter = 1
+				break
+				
+			end
+		end
+		
+		vsum = zeros(M)
+		for h in 1:M
+			#update parameters
+			g, vsum, z, alpha, beta, kappa, lambda, mu, rho = update_parameters_and_other_stuff(iter, vsum, h, M, N, m, n, Lt, fp, z, alpha, beta, kappa, lambda, mu, rho, rhomin, rhomax, update_rho, y, g, rholrate)
+			#Newton
+			A = newton_method(M, A, vsum, h, iter, b, n, g, kappa, do_newton, newt_start_iter, lrate, lnatrate, N, sigma2, lambda)
+		end
+	
+		A, mu, beta, c = reparameterize(A, x, M, mu, beta, v, c, gm, n)
+	end
+	for h in 1:M
+		if M > 1
+			c[:,h] = c[:,h] + mn #add mean back to model centers
+		end
+	end
+	return z, counter, A, Lt, LL
 end
 
-# ╔═╡ 6e2833c2-f2ff-41fe-bf0f-9aabb377ea0e
-loglikelihoodMMGG.(eachcol(mu[:,:,1]),eachcol(beta[:,:,1]),eachcol(rho[:,:,1]),eachrow(b[:,:,1]),eachcol(alpha[:,:,1]))
+# ╔═╡ 31167a9c-243d-487e-b1c7-e0a492b07ca5
+
+
+# ╔═╡ 6c4d5c19-39a0-4376-a552-8d1fd41dbb4b
+2×2 Matrix{Float64}:
+ 0.824693  0.653609
+ 0.565581  0.756833
+
+# ╔═╡ f5296f6f-9d2e-4dde-9c82-987ef7a7f1c7
+begin
+	x = [1 4; 4 1]*Float64.([1 2 3 4 5 6; 7 8 9 10 11 12])
+	M = 1 #number of mixture models
+	m = 3 #number of source density mixtures
+	maxiter = 1 #max iterations
+	update_rho = 1
+	mindll = 1e-8
+	iterwin = 1 #default should be 50?
+	do_newton = 1
+	remove_mean = 1
+	z, counter, A, Lt, LL = amica(x, M, m, maxiter, update_rho, mindll, iterwin, do_newton, remove_mean)
+end
 
 # ╔═╡ 5e4d7df6-4636-4916-b46e-a7c4c9bdfab4
 function get_likelihood_time(A, gm, mu, beta, rho, alpha, b, h)
-		ldet[h] =  -log(abs(det(A[:,:,h])))
-		Lt[h,:] .= log(gm[h]) + ldet[h]
+		#ldet[h] =  -log(abs(det(A[:,:,h])))
+		#Lt[h,:] .= log(gm[h]) + ldet[h]
 		#erste version:
 		# Lt[h,:] = sum(loglikelihoodMMGG.(eachcol(mu[:,:,h]),eachcol(alpha[:,:,h]),eachcol(rho[:,:,h]),eachrow(b[:,:,h])))
 		#zweite Version:
-		Lt[h,:] = Lt[h,:] + sum(loglikelihoodMMGG.(eachcol(mu[:,:,h]),eachcol(beta[:,:,h]),eachcol(rho[:,:,h]),eachrow(b[:,:,h]),eachcol(alpha[:,:,h])))
+		#Lt[h,:] = Lt[h,:] + sum(loglikelihoodMMGG.(eachcol(mu[:,:,h]),eachcol(beta[:,:,h]),eachcol(rho[:,:,h]),eachrow(b[:,:,h]),eachcol(alpha[:,:,h])))
 
-		#Lt[1,:] = [-84.2453 -40.6495 -9.3180 -7.9679 -38.9525 -83.2213]
+		Lt[1,:] = [-84.2453 -40.6495 -9.3180 -7.9679 -38.9525 -83.2213]
 		#lines 226 - 239
 
 		return Lt
 end
 
-# ╔═╡ f8a70a95-1ab7-4dca-8363-b6b8e6a67bb2
-# #calculate z (which is u at first) lines 202 - 218, probably unnessary
-				#if M > 1 && m > 1
-function calculate_z_y(m,n,beta,mu,alpha,rho,h)
-		for i in 1:n
-			for j in 1:m
-				y[i,:,j,h] = sqrt(beta[j,i,h]) * (b[i,:,h] .- mu[j,i,h])
-				Q[j,:] .= log(alpha[j,i,h]) + 0.5*log(beta[j,i,h]) .+ logpfun(y[i,:,j,h],rho[j,i,h])
-			end
-			if m > 1
-				#hier ist eig. noch berechnung von Qmax und Lt
-				for j in 1:m
-					Qj = ones(m,1) .* Q[j,:]'
-					z[i,:,j,h] = 1 ./ sum(exp.(Q-Qj),dims = 1)
-				end
-			end
-			return z, y
-		end
-
-# ╔═╡ 663eb494-00e9-436b-a832-29461b536b66
-#iteratively optimize parameters using EM
-	#for iter in 1:1 #todo: zurück auf 1:maxiter setzen
-		#get y, Q, Lt, u (u is named z since z overwrites it later)
-		#for h in 1:M 
-function get_sources!(b,A,x,h,M)
-	if M == 1
-		b .= pinv(A[:,:,1]) * x
-	else 
-		Wh = pinv(A[:,:,h])
-		for i in 1:n 
-			b[i,:,h] .= Wh[i,:]' * x #musste transponiert werden
-		end
-	return b
-	end
-end
-
-# ╔═╡ 95c80f54-f2e6-45bb-8842-3e7c3cbb7b7d
-#calculate lrate (243 - 260)
-function calculate_lrate(dLL, lrate, lratefact, lnatrate,lratemax,mindll,iter,newt_start_iter,do_newton,iterwin)
-		sdll = sum(dLL[iter-iterwin+1:iter])/iterwin
-		if (sdll > 0) && (sdll < mindll)
-			return -1
-		end
-		if sdll < 0
-			println("Likelihood decreasing!")
-			lrate .= lrate * lratefact
-		else
-			#lrate über zeit nochmal anschauen. wird sie größer??
-			if iter > newt_start_iter && do_newton
-				lrate .= min(lratemax,lrate + min(0.1,lrate))
-			else
-				lrate .= min(lnatrate,lrate + min(0.1,lrate))
-			end
-		end
-	return lrate
-end
-
-# ╔═╡ a50d8c62-3cfb-41e6-9739-b1a251c34430
-for iter in 1:1
-	for h in 1:M
-		b .= get_sources!(b,A,x,h,M)
-		Lt = get_likelihood_time(A, gm, mu, beta, rho, alpha, b, h)
-		LL[iter] = calculate_LL(Lt, M, N, n)
-	end
-	if iter > 1
-		dLL[iter] = LL[iter] - LL[iter-1]
-		z, y = calculate_z_y(m,n,beta,mu,alpha,rho,h)
-		if iter > iterwin +1
-			lrate = calculate_lrate((dLL, lrate, lratefact, lnatrate,lratemax,mindll,iter,newt_start_iter,do_newton))
-			lrate < 0 ? break : ""
-		end
-	end
-	for h in 1:M
-		
-	end
-end
-
-# ╔═╡ 56cef72d-a64f-4bd0-8f95-9b6093a7733c
-#monster for loop (264 - ??) zum Parameter updaten
-	begin
-	#get v, z, gm, and alpha
-	vsum = zeros(M)
-	#for h in 1:M
-		if M > 1 #todo: testen
-			Lh = ones(M,N)
-			for i in 1:M
-				Lh[i,:] = Lt[h,:]
-			end
-			v[h,:] = 1 ./ sum(exp.(Lt-Lh),dims=1)
-			vsum[h] = sum(v[h,:])
-			gm[h] = vsum[h] / N
-
-			if gm[h] == 0
-				#continue #whats the point???
-			end
-		end
-		#g = zeros(n,N)
-		#kappa = zeros(n,1) #why initialize it again??
-		eta = zeros(n,1)
-		#sigma2 = zeros(n,1)
-
-
-		#eigentlich in loop deklariert:
-		zfp = zeros(m, N)
-
-		for i in 1:n
-			for j in 1:m
-				sumz = 0
-				if M > 1 #todo: testen
-					if m > 1
-						z[i,:,j,h] .= v[h,:] .* z[i,:,j,h]
-						sumz = sum(z[i,:,j,h])
-						alpha[j,i,h] = sumz / vsum[h]
-					else
-						z[i,:,j,h] = v[h,:]
-						sumz = sum(z[i,:,j,h])
-					end
-				else
-					if m > 1
-						sumz = sum(z[i,:,j,h])
-						alpha[j,i,h] = sumz / N
-					else
-						sumz = N
-					end
-				end
-
-				if sumz > 0
-					if (M > 1) | (m > 1)
-						z[i,:,j,h] .= z[i,:,j,h] / sumz
-					end
-				else
-					continue
-				end
-				#line 311
-				fp[j,:] = ffun(y[i,:,j,h], rho[j,i,h])
-				zfp[j,:] = z[i,:,j,h] .* fp[j,:]
-
-				g[i,:] = g[i,:] .+alpha[j,i,h] .*sqrt(beta[j,i,h]) .*zfp[j,:]
-
-				kp = beta[j,i,h] .* sum(zfp[j,:].*fp[j,:])
-
-				kappa[i] = kappa[i]  + alpha[j,i,h] * kp
-
-				lambda[i] = lambda[i] + alpha[j,i,h] * (sum(z[i,:,j,h].*(fp[j,:].*y[i,:,j,h] .-1).^2) + mu[j,i,h]^2 * kp)
-
-				if rho[j,i,h] <= 2
-					if (m > 1) | (M > 1)
-						dm = sum(zfp[j,:]./y[i,:,j,h])
-						if dm > 0
-							mu[j,i,h] = mu[j,i,h] + (1/sqrt(beta[j,i,h])) * sum(zfp[j,:]) / dm
-						end
-					end
-
-					db = sum(zfp[j,:].*y[i,:,j,h])
-					if db > 0
-						beta[j,i,h] = beta[j,i,h] / db
-					end
-				else #todo: noch überprüfen, tritt bei erster iteration nicht ein
-					if (m > 1) | (M > 1)
-						if kp > 0
-							mu[j,i,h] = mu[j,i,h] + sqrt(beta[j,i,h]) * sum(zfp[j,:]) / kp #only difference is sqrt instead of 1/sqrt
-						end
-					end
-					db = (rho[j,i,h] * sum(z[i,:,j,h].*abs(y[i,:,j,h]).^rho[j,i,h]))^(-2 / rho[j,i,h])
-					beta[j,i,h] = beta[j,i,h] * db
-				end
-
-				if update_rho == 1
-					ytmp = abs.(y[i,:,j,h]).^rho[j,i,h]
-					dr = sum(z[i,:,j,h].*log.(ytmp).*ytmp)
-
-					#todo: dieses if testen, wird bei ersten iteration nicht ausgeführt
-					if rho[j,i,h] > 2
-						dr2 = digamma(1+1/rho[j,i,h]) / rho[j,i,h] - dr
-						if ~isnan(dr2) #todo: testen
-							rho[j,i,h] = rho[j,i,h] + 0.5 * dr2
-						end
-					else
-						dr2 = 1 - rho[j,i,h] * dr / digamma(1+1/rho[j,i,h])
-						if ~isnan(dr2) #todo: testen
-							rho[j,i,h] = rho[j,i,h] + rholrate *dr2
-						end
-					end
-					rho[j,i,h] = min(rhomax, rho[j,i,h])
-					rho[j,i,h] = max(rhomin, rho[j,i,h])
-				end
-			end
-		end
-	end
-#end
-
-# ╔═╡ 31cae32e-19a8-4966-abc5-5193528075b2
-zfp
-
-# ╔═╡ 361f53d6-6f0b-418a-b12e-3ad354241249
-#Der gute Newton
-begin
-	if M > 1 #todo:testen
-		sigma2 .= b[:,:,h].^2 * v[h,:]'/vsum(h)
-	else
-		sigma2 .= sum(b.^2,dims=2) / N
-	end
-	dA = Matrix{Float64}(I, n, n) - g * b[:,:,h]' 
-	bflag = 0
-	
-	#eig. in loop deklariert
-	B = zeros(n,n)
-	
-	for i in 1:n
-		for k = 1:n
-			if i == k
-				B[i,i] = dA[i,i] / (-0*dA[i,i] + lambda[i])#*0?? wtf??
-			else
-				denom = kappa[i]*kappa[k]*sigma2[i]*sigma2[k] - 1
-				if denom > 0
-					B[i,k] = (-kappa[k] * sigma2[i] * dA[i,k] + dA[k,i]) / denom
-				else
-					bflag = 1
-				end
-			end
-		end		
-	end
-	if (bflag == 0) && (do_newton == 1) && (iter > newt_start_iter)
-		A[:,:,h] = A[:,:,h] + lrate * A[:,:,h] * B
-	else
-		A[:,:,h] = A[:,:,h] - lnatrate * A[:,:,h] * dA
-	end
-	#hier endet eig. die 1:M schleife
-end
-
-# ╔═╡ a707d664-0314-45e1-8082-ee4d0b3f8fd5
-#Reparametrisierung (393 - ?)
-begin
-	#for h in 1:M
-	if gm[h] == 0 #todo:  das auch wieder einfügen
-		#continue
-	end
-	for i in 1:n
-		tau = norm(A[:,i,h])
-		A[:,i,h] = A[:,i,h] / tau
-		mu[:,i,h] = mu[:,i,h] * tau
-		beta[:,i,h] = beta[:,i,h] / tau^2
-	end
-
-	if M > 1 #todo: testen
-		cnew = x * v[h,:]'/(sum(v[h,:]))
-		for i in 1:n
-			Wh = pinv(A[:,:,h])
-			mu[:,i,h] = mu[:,i,h] - Wh[i,:]*(cnew-c[:,h])
-		end
-		c[:,h] = cnew
-	end
-	#end
-end
-
-# ╔═╡ 606df3d9-c930-4d8d-96ea-d21afb59867a
-#todo:Plot
-if plotfig & mod(iter,dispinterval) == 0
-end
-#Hier Ende von iter:maxiter schleife
-
-# ╔═╡ 4b53528f-dc8c-41f0-b0ae-8758dfb807c3
-for h in 1:M
-	if M > 1
-		c[:,h] = c[:,h] + mn
-	end
-end
-
-# ╔═╡ ab3bee37-ef91-4e7e-b11c-17438fcf2e41
-Lt
-
-# ╔═╡ 2d2fab6c-f419-497d-9f1f-df9ad4db6b05
+# ╔═╡ f1f91387-f902-4348-89d0-8b5650b7c085
 A
 
-# ╔═╡ b68c6d09-eff8-4cad-848d-7dcdcd58f1b5
-md"""Bisher getestet:\
-Rho ist richtig\
-beta falsch\
-lambda falsch\
-mu falsch\
-g falsch\
-z richtig\
-alpha richtig\
-fp und fpz falsch
-"""
+# ╔═╡ 0e6ea29e-1019-4b5e-9bb4-0a205fcaef76
+counter
 
-# ╔═╡ 6874a15b-e9e2-4b95-948e-e945ab476c15
-let
-begin
-g = zeros(2,6)
-g[1,:] = g[1,:] .+alpha[1,1,1] .*sqrt(beta[1,1,1]) .*zfp[1,:]
-end
-end
+# ╔═╡ 00e69af3-c88f-4fe4-95bb-684a530f041d
+LL
 
-# ╔═╡ 53d3faf8-a973-4883-b78b-cabfb62ee975
-#end
-#end
-#TODO: Likelihoodsache überprüfen (parameter, kommt das selbe raus?)
-
-# ╔═╡ 0a49b234-21a1-41a1-9725-e3ca5b2d5036
+# ╔═╡ b287ec5f-ad62-4954-b1f5-f37c854fb626
 z
 
-# ╔═╡ e078768d-1173-481f-9306-8e16f8f38350
-Lt_test = [-90.7062 -43.2784 -9.8391 -9.8083 -43.2771 -90.8522; -88.1036 -42.2649 -9.7483 -9.6876 -42.4683 -88.9279]
-
-# ╔═╡ 71ac7add-b78a-42af-aeb2-231066d8cccc
-ztest = zeros(n,N,m,M)
-
-# ╔═╡ f99686a9-3761-4b2c-95b8-f9ad4d2eb25b
-ztest[1,1,1,1] = 5
-
-# ╔═╡ d08ae926-74e1-477c-80ca-17d76439a46e
-Q[1,:]
-
-# ╔═╡ 782893a6-a2eb-441d-b7e8-5d46021789ba
-vtest[:,:] .= 3
-
-# ╔═╡ 40b843a9-ffe7-440e-91ad-364b7a3072f0
-Lt
-
-# ╔═╡ 2407b675-0375-4f24-892b-497877fe8454
-begin
-for h in 1:M
-	for i in 1:n
-		for j in 1:m
-			ztest[i,:,j,h] = vtest[h,:] .* ztest[i,:,j,h]
-		end
-	end
-end
-end
-
-# ╔═╡ dd9aeddc-ac18-46d0-bf9e-4b57b9aae3c3
-begin
-	Wh2 = pinv(A[:,:,1])
-	#b2 = zeros(n,N,M)
-	b2 = zeros(1,6)
-	for i in 1:n 
-		b2 = Wh2[i,:]' * x
-	end
-	b2
-end
-
-#1x6 = 1x2 * 2x6
-
-# ╔═╡ 955f84ab-167a-407b-b16e-6d4db0417b97
-Wh
-
-# ╔═╡ a2adf7cc-592d-42f9-b14c-d615e972347d
-begin
-	test2 = zeros(2,6,2)
-	test1 = [3 2]
-	test2[:,:,1] = [1 2 3 4 5 6; 4 5 6 7 8 9]
-	result = test1*test2[:,:,1]
-	result
-end
-
-# ╔═╡ 881a8422-55ec-46d6-85de-b03192235f7f
-[1 2]* [1 2 3 4; 3 4 5 6]
-
-# ╔═╡ 101e9cdc-e80b-47d7-951c-d99d1aa118e8
-# let
-# begin
-# 	x = range(-5, 5, length = 100)
-# 	p = PGeneralizedGaussian(0, 1, 2) #mu, alpha, rho
-# 	y = pdf.(p, x)
-
-# 	f = Figure(resolution=(600, 400), font_size=16)
-# 	ax = f[1, 1] = Axis(f, xlabel = "x", ylabel = "PDF")
-# 	lines!(ax, x, y, color=:blue)
-# 	f
-# end
-# end
-
-# ╔═╡ 9422c0cd-1eff-43d2-80fe-c949190bfd8d
-
+# ╔═╡ ff10ec26-804f-4954-a425-f4465848134d
+opnorm([1 2 3; 4 5 6])
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2023,39 +1949,24 @@ version = "3.5.0+0"
 # ╠═1fbfcbb4-f3aa-4e37-be4a-4996d756d34d
 # ╠═f8ba9b55-7aff-4861-a8db-7129726bd847
 # ╠═c5d2c8ad-c08d-4f46-8053-6a1b342cb91e
-# ╠═e26a13cc-d53c-4156-bd58-3cca3c9547a8
 # ╠═e60acb65-5b7a-485f-8841-aee61beecaf3
 # ╠═6e2833c2-f2ff-41fe-bf0f-9aabb377ea0e
-# ╠═89920839-8a9e-49d4-b34b-d86dcc2a404b
 # ╠═5e4d7df6-4636-4916-b46e-a7c4c9bdfab4
 # ╠═f8a70a95-1ab7-4dca-8363-b6b8e6a67bb2
 # ╠═663eb494-00e9-436b-a832-29461b536b66
 # ╠═95c80f54-f2e6-45bb-8842-3e7c3cbb7b7d
+# ╠═94c5a1bf-b737-4bd3-8199-1385abcd7ca2
+# ╠═7c745a97-a774-4cd6-b4fb-752155beb46a
+# ╠═e5c496b0-e1a1-414a-a4ae-ec74617931b2
+# ╠═b3637deb-985f-4fea-bf99-d956ad4a2877
 # ╠═a50d8c62-3cfb-41e6-9739-b1a251c34430
-# ╠═56cef72d-a64f-4bd0-8f95-9b6093a7733c
-# ╠═31cae32e-19a8-4966-abc5-5193528075b2
-# ╠═361f53d6-6f0b-418a-b12e-3ad354241249
-# ╠═a707d664-0314-45e1-8082-ee4d0b3f8fd5
-# ╠═606df3d9-c930-4d8d-96ea-d21afb59867a
-# ╠═4b53528f-dc8c-41f0-b0ae-8758dfb807c3
-# ╠═ab3bee37-ef91-4e7e-b11c-17438fcf2e41
-# ╠═2d2fab6c-f419-497d-9f1f-df9ad4db6b05
-# ╠═b68c6d09-eff8-4cad-848d-7dcdcd58f1b5
-# ╠═6874a15b-e9e2-4b95-948e-e945ab476c15
-# ╠═53d3faf8-a973-4883-b78b-cabfb62ee975
-# ╠═0a49b234-21a1-41a1-9725-e3ca5b2d5036
-# ╠═e078768d-1173-481f-9306-8e16f8f38350
-# ╠═71ac7add-b78a-42af-aeb2-231066d8cccc
-# ╠═f99686a9-3761-4b2c-95b8-f9ad4d2eb25b
-# ╠═d08ae926-74e1-477c-80ca-17d76439a46e
-# ╠═782893a6-a2eb-441d-b7e8-5d46021789ba
-# ╠═40b843a9-ffe7-440e-91ad-364b7a3072f0
-# ╠═2407b675-0375-4f24-892b-497877fe8454
-# ╠═dd9aeddc-ac18-46d0-bf9e-4b57b9aae3c3
-# ╠═955f84ab-167a-407b-b16e-6d4db0417b97
-# ╠═a2adf7cc-592d-42f9-b14c-d615e972347d
-# ╠═881a8422-55ec-46d6-85de-b03192235f7f
-# ╠═101e9cdc-e80b-47d7-951c-d99d1aa118e8
-# ╠═9422c0cd-1eff-43d2-80fe-c949190bfd8d
+# ╠═31167a9c-243d-487e-b1c7-e0a492b07ca5
+# ╠═6c4d5c19-39a0-4376-a552-8d1fd41dbb4b
+# ╠═f5296f6f-9d2e-4dde-9c82-987ef7a7f1c7
+# ╠═f1f91387-f902-4348-89d0-8b5650b7c085
+# ╠═0e6ea29e-1019-4b5e-9bb4-0a205fcaef76
+# ╠═00e69af3-c88f-4fe4-95bb-684a530f041d
+# ╠═b287ec5f-ad62-4954-b1f5-f37c854fb626
+# ╠═ff10ec26-804f-4954-a425-f4465848134d
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

@@ -193,7 +193,7 @@ begin
 
 			if M == 1
 				b .= pinv(A[:,:,1]) * x
-			else 
+			else #das sollte nicht in einem else sein
 				Wh = pinv(A[:,:,h])
 				for i in 1:n 
 					b[i,:,h] .= Wh[i,:]' * x #musste transponiert werden
@@ -373,7 +373,10 @@ end
 		#end
 
 # ╔═╡ 31cae32e-19a8-4966-abc5-5193528075b2
-zfp
+LL
+
+# ╔═╡ 54a4f4ac-779f-4a6c-b3f5-06b23dd0696c
+alpha
 
 # ╔═╡ 361f53d6-6f0b-418a-b12e-3ad354241249
 #Der gute Newton
@@ -2016,6 +2019,7 @@ version = "3.5.0+0"
 # ╠═95c80f54-f2e6-45bb-8842-3e7c3cbb7b7d
 # ╠═56cef72d-a64f-4bd0-8f95-9b6093a7733c
 # ╠═31cae32e-19a8-4966-abc5-5193528075b2
+# ╠═54a4f4ac-779f-4a6c-b3f5-06b23dd0696c
 # ╠═361f53d6-6f0b-418a-b12e-3ad354241249
 # ╠═a707d664-0314-45e1-8082-ee4d0b3f8fd5
 # ╠═606df3d9-c930-4d8d-96ea-d21afb59867a

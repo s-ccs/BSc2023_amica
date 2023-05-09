@@ -43,11 +43,10 @@ end
 
 # ╔═╡ d8c59aa1-5a52-43fa-89d3-4a9a5d35147f
 # calculate loglikelihood for each sample in vector x, given a parameterization of a mixture of PGeneralizedGaussians
-function loglikelihoodMMGG(μ::AbstractVector,α::AbstractVector,ρ::AbstractVector,x::AbstractVector)
+function loglikelihoodMMGG(μ::AbstractVector,α::AbstractVector,ρ::AbstractVector,x::AbstractVector,π::AbstractVector)
 	# take the vectors of μ,α,ρ and generate a GG from each
     GGvec = PGeneralizedGaussian.(μ,α,ρ)
-    MM = MixtureModel(GGvec) # make it a mixture model
-	
+    MM = MixtureModel(GGvec,Vector(π)) # make it a mixture model with prior probabilities π
     return loglikelihood.(MM,x) # apply the loglikelihood to each sample individually (note the "." infront of .(MM,x))
 end
 
@@ -79,7 +78,7 @@ end
 #Inputs
 begin
 	x = [1 4; 4 1]*Float64.([1 2 3 4 5 6; 7 8 9 10 11 12])
-	M = 2 #number of mixture models
+	M = 1 #number of mixture models
 	m = 3 #number of source density mixtures
 	maxiter = 10 #max iterations
 	update_rho = 1
@@ -129,13 +128,14 @@ begin
 	c = zeros(n,M)
 	eye = Matrix{Float64}(I, n, n)
 
-	for h in 1:M
-		A[:,:,h] = eye[n] .+ 0.1*rand(n,n)
-		for i in 1:n
-			A[:,i,h] = A[:,i,h] / norm(A[:,i,h])
-		end
+	for h in 1:M #todo: wieder randomisieren
+		# A[:,:,h] = eye[n] .+ 0.1*rand(n,n)
+		# for i in 1:n
+		# 	A[:,i,h] = A[:,i,h] / norm(A[:,i,h])
+		# end
 		c[:,h] = zeros(n,1)
 	end
+	A = [1.0 0.003; -0.05 1.0]
 
 	gm = (1/M) * ones(M,1)
 	alpha = (1/m) * ones(m,n,M)
@@ -146,7 +146,8 @@ begin
 		mu = zeros(m, n, M)
 	end
 
-	beta = ones(m, n, M) + 0.1 * randn(m, n, M)
+	beta2 = ones(m, n, M) + 0.1 * randn(m, n, M) #renamed because of namespace issues
+	#beta2 = [1.1 0.9; 1.0 0.9; 0.9 0.8] #todo: wieder randomisieren
 
 	rho = rho0 * ones(m, n, M)
 
@@ -175,7 +176,7 @@ begin
 	
 
 #iteratively optimize parameters using EM
-	for iter in 1:maxiter
+	for iter in 1:1 #todo: 1:maxiter
 		#get y, Q, Lt, u (u is named z since z overwrites it later)
 		for h in 1:M
 			ldet[h] =  -log(abs(det(A[:,:,h])))
@@ -183,173 +184,185 @@ begin
 
 			if M == 1
 				b = pinv(A[:,:,1]) * x
-			else 
-				Wh = pinv(A[:,:,h])
+			else
 				b = zeros(n,N,M)
-				for i in 1:n 
-					b[i,:,h] = Wh[i,:]' * x #musste transponiert werden
-				end
 			end
-			Lt[h,:] = sum(loglikelihoodMMGG.(eachcol(mu[:,:,h]),eachcol(alpha[:,:,h]),eachcol(rho[:,:,h]),eachrow(b[:,:,h])))
-
-			#todo z
-			LL[iter] = calculate_LL(Lt, M, N, n)
-
-			if iter > 1
-				dLL[iter] = LL[iter] - LL[iter-1]
-			end
-
-			if showLL == 1
-				#todo: display LL at each iteration
-			end
-			
-			if iter > iterwin + 1
-				sdll = sum(dLL[iter-iterwin+1:iter])/iterwin
-				if (sdll > 0) && (sdll < mindll)
-					break
+			for i in 1:n 
+				Wh = pinv(A[:,:,h])
+				b[i,:,h] = Wh[i,:]' * x #musste transponiert werden
+				#calculate z
+				for j in 1:m
+					y[i,:,j,h] = sqrt(beta2[j,i,h]) * (b[i,:,h] .- mu[j,i,h])
+					Q[j,:] .= log(alpha[j,i,h]) + 0.5*log(beta2[j,i,h]) .+ logpfun(y[i,:,j,h],rho[j,i,h])
 				end
-				if sdll < 0
-					println("Likelihood decreasing!")
-					lrate = lrate * lratefact
-				else
-					if iter > newt_start_iter && do_newton
-						lrate = min(lratemax,lrate + min(0.1,lrate))
-					else
-						lrate = min(lnatrate,lrate + min(0.1,lrate))
-					end
-				end
-			end
-			
-			#get v, z, gm, and alpha (line 262)
-			vsum = zeros(M)
-			for h in 1:M
-				if M > 1
-					Lh = ones(M,N)
-					for i in 1:M
-						Lh[i,:] = Lt[h,:]
-					end
-					v[h,:] = 1 ./ sum(exp.(Lt-Lh),dims=1)
-					vsum[h] = sum(v[h,:])
-					gm[h] = vsum[h] / N
-
-					if gm[h] == 0
-						continue #whats the point???
-					end
-				end
-				g = zeros(n,N)
-				kappa = zeros(n,1) #why initialize it again??
-				eta = zeros(n,1)
-				sigma2 = zeros(n,1)
-
-				#calculate z (which is u at first) lines 202 - 218, probably unnessary
-				if M > 1 && m > 1
-					for i in 1:n
-						for j in 1:m
-							y[i,:,j,h] = sqrt(beta[j,i,h]) * (b[i,:,h] .- mu[j,i,h])
-							Q[j,:] .= log(alpha[j,i,h]) + 0.5*log(beta[j,i,h]) .+ logpfun(y[i,:,j,h],rho[j,i,h])
-							Qj = ones(m,1) .* Q[j,:]'
-							z[i,:,j,h] = 1 ./ sum(exp.(Q-Qj),dims = 1)
-						end
-					end
-				end
-
-				for i in 1:n
+				if m > 1
+							#hier ist eig. noch berechnung von Qmax und Lt
 					for j in 1:m
-						sumz = 0
-						if M > 1
-							if m > 1
-								z[i,:,j,h] = v[h,:] .* z[i,:,j,h]
-								sumz = sum(z[i,:,j,h])
-								alpha[j,i,h] = sumz / vsum[h]
-							else
-								z[i,:,j,h] = v[h,:]
-								sumz = sum(z[i,:,j,h])
-							end
-						else
-							if m > 1
-								sumz = sum(z[i,:,j,h])
-								alpha[j,i,h] = sumz / N
-							else
-								sumz = N
-							end
-						end
-
-						if sumz > 0
-							if M > 1 | m > 1
-								z[i,:,j,h] = z[i,:,j,h] / sumz
-							end
-						else
-							continue
-						end
+						Qj = ones(m,1) .* Q[j,:]'
+						z[i,:,j,h] = 1 ./ sum(exp.(Q-Qj),dims = 1)
 					end
 				end
 			end
-		end	
-	end
-end
+			
+			#Lt[h,:] = sum(loglikelihoodMMGG.(eachcol(mu[:,:,h]),eachcol(beta2[:,:,h]),eachcol(rho[:,:,h]),eachrow(b[:,:,h]),eachcol(alpha[:,:,h])))
+			Lt[h,:] = [-84.2453 -40.6495 -9.3180 -7.9679 -38.9525 -83.2213]
+		end
+		LL[iter] = calculate_LL(Lt, M, N, n)
+		if iter > 1
+			dLL[iter] = LL[iter] - LL[iter-1]
+		end
+		if showLL == 1
+			#todo: display LL at each iteration
+		end
+			
+		if iter > iterwin + 1
+			sdll = sum(dLL[iter-iterwin+1:iter])/iterwin
+			if (sdll > 0) && (sdll < mindll)
+				break
+			end
+			if sdll < 0
+				println("Likelihood decreasing!")
+				lrate = lrate * lratefact
+			else
+				if iter > newt_start_iter && do_newton
+					lrate = min(lratemax,lrate + min(0.1,lrate))
+				else
+					lrate = min(lnatrate,lrate + min(0.1,lrate))
+				end
+			end
+		end
+			
+		#get v, z, gm, and alpha (line 262)
+		vsum = zeros(M)
 
-# ╔═╡ 0a49b234-21a1-41a1-9725-e3ca5b2d5036
-z
+		#update parameters
+		for h in 1:M
+			if M > 1
+				Lh = ones(M,N).*Lt[h,:]
+				v[h,:] = 1 ./ sum(exp.(Lt-Lh),dims=1)
+				vsum[h] = sum(v[h,:])
+				gm[h] = vsum[h] / N
 
-# ╔═╡ e078768d-1173-481f-9306-8e16f8f38350
-Lt_test = [-90.7062 -43.2784 -9.8391 -9.8083 -43.2771 -90.8522; -88.1036 -42.2649 -9.7483 -9.6876 -42.4683 -88.9279]
+				if gm[h] == 0
+					continue #whats the point???
+				end
+			end
+			#g = zeros(n,N)
+			#kappa = zeros(n,1) #why initialize it again??
+			eta = zeros(n,1)
+			#sigma2 = zeros(n,1)
 
-# ╔═╡ 71ac7add-b78a-42af-aeb2-231066d8cccc
-ztest = zeros(n,N,m,M)
+				
+			#eigentlich in loop deklariert:
+			zfp = zeros(m, N)
+				
+			for i in 1:1
+				for j in 1:1
+					sumz = 0
+					if M > 1 #todo: testen
+						if m > 1
+							z[i,:,j,h] .= v[h,:] .* z[i,:,j,h]
+							sumz = sum(z[i,:,j,h])
+							alpha[j,i,h] = sumz / vsum[h]
+						else
+							z[i,:,j,h] = v[h,:]
+							sumz = sum(z[i,:,j,h])
+						end
+					else
+						if m > 1
+							sumz = sum(z[i,:,j,h])
+							alpha[j,i,h] = sumz / N
+						else
+							sumz = N
+						end
+					end
 
-# ╔═╡ f99686a9-3761-4b2c-95b8-f9ad4d2eb25b
-ztest[1,1,1,1] = 5
+					if sumz > 0
+						if (M > 1) | (m > 1)
+							z[i,:,j,h] .= z[i,:,j,h] / sumz
+						end
+					else
+						continue
+					end
+					#line 311
+					fp[j,:] = ffun(y[i,:,j,h], rho[j,i,h])
+					zfp[j,:] = z[i,:,j,h] .* fp[j,:]
 
-# ╔═╡ a52f7b3e-ea4c-4efa-9c92-7a103b2f4e4a
-ztest[1,1,1,2] = 6
+					g[i,:] = g[i,:] .+alpha[j,i,h] .*sqrt(beta2[j,i,h]) .*zfp[j,:]
 
-# ╔═╡ d08ae926-74e1-477c-80ca-17d76439a46e
-Q[1,:]
+					kp = beta2[j,i,h] .* sum(zfp[j,:].*fp[j,:])
 
-# ╔═╡ 782893a6-a2eb-441d-b7e8-5d46021789ba
-vtest[:,:] .= 3
+					kappa[i] = kappa[i]  + alpha[j,i,h] * kp
 
-# ╔═╡ 40b843a9-ffe7-440e-91ad-364b7a3072f0
-Lt
+					lambda[i] = lambda[i] + alpha[j,i,h] * (sum(z[i,:,j,h].*(fp[j,:].*y[i,:,j,h] .-1).^2) + mu[j,i,h]^2 * kp)
 
-# ╔═╡ 2407b675-0375-4f24-892b-497877fe8454
-begin
-for h in 1:M
-	for i in 1:n
-		for j in 1:m
-			ztest[i,:,j,h] = vtest[h,:] .* ztest[i,:,j,h]
+					if rho[j,i,h] <= 2
+						if (m > 1) | (M > 1)
+							dm = sum(zfp[j,:]./y[i,:,j,h])
+							if dm > 0
+								mu[j,i,h] = mu[j,i,h] + (1/sqrt(beta2[j,i,h])) * sum(zfp[j,:]) / dm
+							end
+						end
+
+						db = sum(zfp[j,:].*y[i,:,j,h])
+						if db > 0
+							beta2[j,i,h] = beta2[j,i,h] / db
+						end
+					else #todo: noch überprüfen, tritt bei erster iteration nicht ein
+						if (m > 1) | (M > 1)
+							if kp > 0
+								mu[j,i,h] = mu[j,i,h] + sqrt(beta2[j,i,h]) * sum(zfp[j,:]) / kp #only difference is sqrt instead of 1/sqrt
+							end
+						end
+						db = (rho[j,i,h] * sum(z[i,:,j,h].*abs(y[i,:,j,h]).^rho[j,i,h]))^(-2 / rho[j,i,h])
+						beta2[j,i,h] = beta2[j,i,h] * db
+					end
+
+					if update_rho == 1
+						ytmp = abs.(y[i,:,j,h]).^rho[j,i,h]
+						dr = sum(z[i,:,j,h].*log.(ytmp).*ytmp)
+
+						#todo: dieses if testen, wird bei ersten iteration nicht ausgeführt
+						if rho[j,i,h] > 2
+							dr2 = digamma(1+1/rho[j,i,h]) / rho[j,i,h] - dr
+							if ~isnan(dr2) #todo: testen
+								rho[j,i,h] = rho[j,i,h] + 0.5 * dr2
+							end
+						else
+							dr2 = 1 - rho[j,i,h] * dr / digamma(1+1/rho[j,i,h])
+							if ~isnan(dr2) #todo: testen
+								rho[j,i,h] = rho[j,i,h] + rholrate *dr2
+							end
+						end
+						rho[j,i,h] = min(rhomax, rho[j,i,h])
+						rho[j,i,h] = max(rhomin, rho[j,i,h])
+					end
+				end
+			end
 		end
 	end
 end
-end
 
-# ╔═╡ dd9aeddc-ac18-46d0-bf9e-4b57b9aae3c3
-begin
-	Wh2 = pinv(A[:,:,1])
-	#b2 = zeros(n,N,M)
-	b2 = zeros(1,6)
-	for i in 1:n 
-		b2 = Wh2[i,:]' * x
-	end
-	b2
-end
+# ╔═╡ 2b346029-e259-43a8-bdd3-0206eb556139
+Lt
 
-#1x6 = 1x2 * 2x6
+# ╔═╡ 6c164728-88cc-4193-b3a6-e80dec54773e
+beta2
 
-# ╔═╡ 955f84ab-167a-407b-b16e-6d4db0417b97
-Wh
+# ╔═╡ acf6ddf8-dd48-48ef-b915-d8daf8f39fe5
+rho
 
-# ╔═╡ a2adf7cc-592d-42f9-b14c-d615e972347d
-begin
-	test2 = zeros(2,6,2)
-	test1 = [3 2]
-	test2[:,:,1] = [1 2 3 4 5 6; 4 5 6 7 8 9]
-	result = test1*test2[:,:,1]
-	result
-end
+# ╔═╡ a835083c-7678-489a-abc2-bc4aaa3221ca
+alpha
 
-# ╔═╡ 881a8422-55ec-46d6-85de-b03192235f7f
-[1 2]* [1 2 3 4; 3 4 5 6]
+# ╔═╡ 4e87a9a6-2d6a-49bf-af14-4655bbe122b1
+mu
+
+# ╔═╡ 2020867d-e9d2-4480-9656-34c350edd653
+kappa
+
+# ╔═╡ 5d43b164-873a-4785-8cc2-3a4c2d73d0f6
+zfp
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1804,18 +1817,12 @@ version = "3.5.0+0"
 # ╠═c5d2c8ad-c08d-4f46-8053-6a1b342cb91e
 # ╠═e26a13cc-d53c-4156-bd58-3cca3c9547a8
 # ╠═62c75202-d0ed-4325-b203-db2bf30e4044
-# ╠═0a49b234-21a1-41a1-9725-e3ca5b2d5036
-# ╠═e078768d-1173-481f-9306-8e16f8f38350
-# ╠═71ac7add-b78a-42af-aeb2-231066d8cccc
-# ╠═f99686a9-3761-4b2c-95b8-f9ad4d2eb25b
-# ╠═a52f7b3e-ea4c-4efa-9c92-7a103b2f4e4a
-# ╠═d08ae926-74e1-477c-80ca-17d76439a46e
-# ╠═782893a6-a2eb-441d-b7e8-5d46021789ba
-# ╠═40b843a9-ffe7-440e-91ad-364b7a3072f0
-# ╠═2407b675-0375-4f24-892b-497877fe8454
-# ╠═dd9aeddc-ac18-46d0-bf9e-4b57b9aae3c3
-# ╠═955f84ab-167a-407b-b16e-6d4db0417b97
-# ╠═a2adf7cc-592d-42f9-b14c-d615e972347d
-# ╠═881a8422-55ec-46d6-85de-b03192235f7f
+# ╠═2b346029-e259-43a8-bdd3-0206eb556139
+# ╠═6c164728-88cc-4193-b3a6-e80dec54773e
+# ╠═acf6ddf8-dd48-48ef-b915-d8daf8f39fe5
+# ╠═a835083c-7678-489a-abc2-bc4aaa3221ca
+# ╠═4e87a9a6-2d6a-49bf-af14-4655bbe122b1
+# ╠═2020867d-e9d2-4480-9656-34c350edd653
+# ╠═5d43b164-873a-4785-8cc2-3a4c2d73d0f6
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
