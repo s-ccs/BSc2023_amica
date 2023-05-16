@@ -316,6 +316,24 @@ function reparameterize(A, x, M, mu, beta, v, c, gm, n)
 	return A, mu, beta, c
 end
 
+# ╔═╡ 64835fc6-edf8-44dc-a853-f380cac6c04a
+function calculate_Lt(Lt_h, Q, y, n, m, h, beta, rho, alpha)
+	Lt_h = Lt_h'
+	for i in 1:n
+		for j in 1:m
+			Q[j,:] = log.(alpha[j,i,h]) + 0.5*log.(beta[j,i,h]) .+ logpfun(y[i,:,j,h],rho[j,i,h])
+		end
+		if m > 1
+			Qmax = ones(m,1).*maximum(Q,dims=1);
+			Lt_h = Lt_h .+ Qmax[1,:]' .+ log.(sum(exp.(Q - Qmax),dims = 1))
+		else
+			Lt_h = Lt_h .+ Q[1,:]
+		end
+	end
+	
+	return Lt_h
+end
+
 # ╔═╡ a50d8c62-3cfb-41e6-9739-b1a251c34430
 function amica(x, M, m, maxiter, update_rho, mindll, iterwin, do_newton, remove_mean)
 	#As
@@ -410,7 +428,8 @@ function amica(x, M, m, maxiter, update_rho, mindll, iterwin, do_newton, remove_
 			b .= get_sources!(b,A,x,h,M,n)
 			#Lt[iter,:] = get_likelihood_time(A, gm, mu, beta, rho, alpha, b, h)
 			#Lt[1,:] = [-84.2453 -40.6495 -9.3180 -7.9679 -38.9525 -83.2213]
-			Lt[h,:] = sum(loglikelihoodMMGG.(eachcol(mu[:,:,h]),eachcol(beta[:,:,h]),eachcol(rho[:,:,h]),eachrow(b[:,:,h]),eachcol(alpha[:,:,h])))
+			#Lt[h,:] = sum(loglikelihoodMMGG.(eachcol(mu[:,:,h]),eachcol(beta[:,:,h]),eachcol(rho[:,:,h]),eachrow(b[:,:,h]),eachcol(alpha[:,:,h])))
+			Lt[h,:] = calculate_Lt(Lt[h,:], Q, y, n, m, h, beta, rho, alpha)
 			LL[iter] = calculate_LL(Lt, M, N, n)
 	
 			z, y = calculate_z_y(m,n,beta,mu,alpha,rho,h,b,y,Q,z)
@@ -447,20 +466,48 @@ function amica(x, M, m, maxiter, update_rho, mindll, iterwin, do_newton, remove_
 	return z, counter, A, Lt, LL
 end
 
+# ╔═╡ 06c9017a-04b0-475f-ac07-2bb6a0ea8367
+let
+	Lt = [-0.00014998875112496793 -0.00014998875112496793 -0.00014998875112496793]
+	Q = [-15.832129873712802 -2.5310679287008178 -10.12316349889457; -12.85491542526353 -1.7421248940963274 -12.85491542526353; -11.916157410568374 -1.803408969974473 -12.032440231799864]
+	y = [-5.332408863748381 -0.10488088481701517 5.122647094114352; -5.8336553069598525 -0.8538149682454624 4.126025370468927;;; -4.974252362145679 0.01 4.994252362145678; -4.97984033871439 0.0 4.97984033871439;;; -4.728476969236426 0.0 4.728476969236426; -4.677149953155014 0.01788854381999832 4.71292704079501;;;;]
+	n = 2
+	m = 3
+	h = 1
+	beta = [1.1 0.9; 1.0 0.9; 0.9 0.8]
+	rho = [1.5 1.5; 1.5 1.5; 1.5 1.5;;;]
+	alpha = [0.3333333333333333 0.3333333333333333; 0.3333333333333333 0.3333333333333333; 0.3333333333333333 0.3333333333333333;;;]
+	Lt
+	Lt = calculate_Lt(Lt[h,:], Q, y, n, m, h, beta, rho, alpha)
+	
+	
+end
+
 # ╔═╡ 31167a9c-243d-487e-b1c7-e0a492b07ca5
+let
+begin
+	y = [1 2; 3 4]
+	x = 0
+	function f1(x)
+		x .= x+1
+	end
+	function f2(x)
+		x[1] = 1000
+	end
+	#f1(x)
+	f2(y)
+	x
+	y
+end
+end
 
-
-# ╔═╡ 6c4d5c19-39a0-4376-a552-8d1fd41dbb4b
-2×2 Matrix{Float64}:
- 0.824693  0.653609
- 0.565581  0.756833
 
 # ╔═╡ f5296f6f-9d2e-4dde-9c82-987ef7a7f1c7
 begin
 	x = [1 4; 4 1]*Float64.([1 2 3 4 5 6; 7 8 9 10 11 12])
 	M = 1 #number of mixture models
 	m = 3 #number of source density mixtures
-	maxiter = 1 #max iterations
+	maxiter = 10 #max iterations
 	update_rho = 1
 	mindll = 1e-8
 	iterwin = 1 #default should be 50?
@@ -487,8 +534,8 @@ end
 # ╔═╡ f1f91387-f902-4348-89d0-8b5650b7c085
 A
 
-# ╔═╡ 0e6ea29e-1019-4b5e-9bb4-0a205fcaef76
-counter
+# ╔═╡ 94ce3ebc-fbfa-47cd-a6d5-0092a361a25f
+Lt
 
 # ╔═╡ 00e69af3-c88f-4fe4-95bb-684a530f041d
 LL
@@ -497,7 +544,63 @@ LL
 z
 
 # ╔═╡ ff10ec26-804f-4954-a425-f4465848134d
-opnorm([1 2 3; 4 5 6])
+let
+	A = [1.0 0.003; -0.05 1.0;;; 2.0 0.003; -0.05 1.0]
+	b = zeros(2,6,2)
+	Wh = [0.9998500224966256 -0.00299955006748992; 0.0499925011248315 0.9998500224966252]
+	x = ones(2,6)
+	for i in 1:2 
+		if true
+			Wh = pinv(A[:,:,2])
+			b[i,:,2] = Wh[i,:]' * x #musste transponiert werden
+		end
+	end
+	@show b
+end
+
+# ╔═╡ c027f3f2-d8d8-4099-b03c-1e99bd03bbc0
+let
+	h = 1
+	c = ones(2,2)
+	mu = ones(3,2)
+	A = [1.0 0.003; -0.05 1.0;;; 2.0 0.003; -0.05 1.0]
+	cnew = [-0.044273190488631944, -0.044273190488631944]
+	
+		Wh = pinv(A[:,:,1])
+		mu[:,1,h] = mu[:,1,h] .- Wh[1,:]' *(cnew-c[:,h])
+	#Wh[1,:]'
+	#c[:,h] = cnew
+end
+
+# ╔═╡ f877eaca-d344-4277-af55-2686d01f0291
+let
+	b = ones(2,6,2)
+	h = 1
+	v = ones(2,6)
+	vsum = ones(2)
+	sigma2 = b[:,:,h].^2 * v[h,:] /vsum[h]
+end
+
+# ╔═╡ 380355d8-77ee-48cd-b902-90c8add19a08
+let #iter 1
+	mu = [0.1 0.9; -0.01 0.0; 0.0 -0.02]
+	beta = [1.1 0.9; 1.0 0.9; 0.9 0.8]
+	rho = [1.5 1.5; 1.5 1.5; 1.5 1.5;;;]
+	b = [-4.9842523621456785 0.0 4.9842523621456785; -5.249212618107284 0.0 5.249212618107284;;;]
+	alpha = [0.3333333333333333 0.3333333333333333; 0.3333333333333333 0.3333333333333333; 0.3333333333333333 0.3333333333333333;;;]
+	Lt = sum(loglikelihoodMMGG.(eachcol(mu[:,:,1]),eachcol(beta[:,:,1]),eachcol(rho[:,:,1]),eachrow(b[:,:,1]),eachcol(alpha[:,:,1])))
+end
+
+# ╔═╡ 53ca3b34-7e17-48c7-9596-6287a56220c2
+let #iter 2
+mu = [0.33913148511015406 7.457900106252859; -0.05137093410226714 0.0; 0.0 -0.9404956515231748]
+beta = [0.030462739805011185 0.01769649658555069; 0.02077813133892766 0.02542644455843534; 0.015816249568273516 0.01613629335141096]
+rho = [0.5 0.5; 0.5 1.5; 1.5 0.5;;;]
+b = [-2.9576972457285793 0.0 2.9576972457285793; -4.4374984433027445 0.0 4.4374984433027445;;;]
+alpha = [0.20124655186730322 0.34267606980458876; 0.29322884528469284 0.24946638423805348; 0.5055246028480039 0.40785754595735774;;;]
+
+Lt = sum(loglikelihoodMMGG.(eachcol(mu[:,:,1]),eachcol(beta[:,:,1]),eachcol(rho[:,:,1]),eachrow(b[:,:,1]),eachcol(alpha[:,:,1])))
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1960,13 +2063,18 @@ version = "3.5.0+0"
 # ╠═e5c496b0-e1a1-414a-a4ae-ec74617931b2
 # ╠═b3637deb-985f-4fea-bf99-d956ad4a2877
 # ╠═a50d8c62-3cfb-41e6-9739-b1a251c34430
+# ╠═64835fc6-edf8-44dc-a853-f380cac6c04a
+# ╠═06c9017a-04b0-475f-ac07-2bb6a0ea8367
 # ╠═31167a9c-243d-487e-b1c7-e0a492b07ca5
-# ╠═6c4d5c19-39a0-4376-a552-8d1fd41dbb4b
 # ╠═f5296f6f-9d2e-4dde-9c82-987ef7a7f1c7
 # ╠═f1f91387-f902-4348-89d0-8b5650b7c085
-# ╠═0e6ea29e-1019-4b5e-9bb4-0a205fcaef76
+# ╠═94ce3ebc-fbfa-47cd-a6d5-0092a361a25f
 # ╠═00e69af3-c88f-4fe4-95bb-684a530f041d
 # ╠═b287ec5f-ad62-4954-b1f5-f37c854fb626
 # ╠═ff10ec26-804f-4954-a425-f4465848134d
+# ╠═c027f3f2-d8d8-4099-b03c-1e99bd03bbc0
+# ╠═f877eaca-d344-4277-af55-2686d01f0291
+# ╠═380355d8-77ee-48cd-b902-90c8add19a08
+# ╠═53ca3b34-7e17-48c7-9596-6287a56220c2
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
