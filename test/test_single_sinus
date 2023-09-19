@@ -1,0 +1,75 @@
+import Amica
+using Amica
+using CairoMakie
+using MAT
+using LinearAlgebra
+
+#using GaussianMixtures
+using Distributions: mean
+#using SpecialFunctions
+#using ComponentArrays
+#using Diagonalizations
+
+function mean_squared_error(A,B)
+    squared_error = (A .- B) .^ 2
+    mse = mean(squared_error)
+    return mse
+end
+
+#Sinus data from mat file
+file = matopen("test/pink_sinus_data.mat")
+x = read(file, "x")
+s = read(file, "s")
+#A = read(file, "A")
+
+beta_init = read(file, "beta_init")
+mu_init = read(file, "mu_init")
+A_init = read(file, "A_init")
+
+close(file)
+am = fit(SingleModelAmica,x;maxiter=1000, m=3, remove_mean = false,do_sphering = false, beta=beta_init[:,:,1], mu=mu_init[:,:,1], A=copy(A_init[:,:,1]))
+#am2 = fit(SingleModelAmica,x;maxiter=100, m=3, remove_mean = true,do_sphering = false, beta=beta_init[:,:,1], mu=mu_init[:,:,1], A=copy(A_init[:,:,1]))
+#am3 = fit(SingleModelAmica,x;maxiter=500, m=3, remove_mean = true,do_sphering = false, beta=beta_init[:,:,1], mu=mu_init[:,:,1], A=copy(A_init[:,:,1]))
+#@time am = fit(SingleModelAmica,x;maxiter=538, m=3)
+#@time am = fit(MultiModelAmica,x;maxiter=50,M=2, m=3)
+
+# file = matopen("test/whereisit.mat", "w")
+# close(file)
+file = matopen("test/results_sinus_matlab_singleModel.mat")
+matlab_A = read(file,"A")
+# matlab_A2 = read(file,"A_2")
+# matlab_A3 = read(file,"A_3")
+matlab_LL = read(file, "LL")
+# matlab_LL2 = read(file, "LL_2")
+# matlab_LL3 = read(file, "LL_3")
+close(file)
+# mse_1 = mean_squared_error(am.A,matlab_A1)
+# mse_2 = mean_squared_error(am2.A,matlab_A2)
+# mse_3 = mean_squared_error(am3.A,matlab_A3)
+
+
+# W1 = pinv(am3.A[:,:,1])
+# W2 = pinv(matlab_A3)
+
+#---
+f = Figure()
+series(f[1,1],s[:,1:100])
+#ax,h = heatmap(f[1,2],A)
+#Colorbar(f[1,3],h)
+
+series(f[1,2],x[:,1:100])
+#ax,h = heatmap(f[2,2],am.A[:,:,1])
+#Colorbar(f[2,3],h)
+
+series(f[2,1],pinv(am.A)*x[:,1:100])
+#series(f[4,1],am.Lt)
+series(f[2,2],pinv(matlab_A)*x[:,1:100])
+#series(f[4,2],(W*x)[:,1:100])
+#series(f[3,1],lines(am3.LL))
+#series(f[3,2],lines(vec(matlab_LL3)))
+lines(f[3,1],am.LL)
+lines(f[3,2],vec(matlab_LL))
+# series(f[4,1],pinv(W)'*x)
+# series(f[6,1],W'*x)
+f
+#----
