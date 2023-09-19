@@ -1,6 +1,6 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.8.5"
+julia_version = "1.8.3"
 manifest_format = "2.0"
 project_hash = "829f96a57e48c159fd9570ed743cba060b6f6db3"
 
@@ -23,7 +23,7 @@ version = "3.6.1"
 
 [[deps.Amica]]
 deps = ["ComponentArrays", "Diagonalizations", "Distributions", "GaussianMixtures", "LinearAlgebra", "MAT", "Parameters", "ProgressMeter", "SignalAnalysis", "SpecialFunctions"]
-path = "../Amica.jl"
+path = "/store/users/lulkin/projects/BSc2023_amica/dev/Amica"
 uuid = "5c2eb853-6fc5-4f26-86bb-b4eb873bb098"
 version = "0.1.0"
 
@@ -214,7 +214,7 @@ version = "4.6.1"
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-version = "1.0.1+0"
+version = "0.5.2+0"
 
 [[deps.ComponentArrays]]
 deps = ["ArrayInterface", "ChainRulesCore", "ForwardDiff", "Functors", "LinearAlgebra", "PackageExtensionCompat", "StaticArrayInterface", "StaticArraysCore"]
