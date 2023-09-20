@@ -1,25 +1,26 @@
 %load("supersmall_data.mat", "x")
 %load("supersmall_data.mat", "s")
-load("pink_sinus_data.mat", "x")
-load("pink_sinus_data.mat", "s")
-%load("eeg_data.mat", "x") %also change in amica.m!!!
+%load("pink_sinus_data.mat", "x")
+%load("pink_sinus_data.mat", "s")
+load("../Experiments/TestData/eeg_data.mat", "x") %also change in amica.m!!!
+%load("../Experiments/TestData/eeg_4model.mat", "x")
 %B = [1 4;4 1];
 %s = gg6(2,1000,[0 0],[1 3],[1.5 1.5]);
 
 %x = [1 4; 4 1]*[1.0 2 3; 4 5 6]
-%x = B*s
+%x = B*stoc = total_timetoc = total_time
 
 %[A,W,S,khinds,c,LL,Ltall,gm,alpha,mu,beta,rho] = amica10(x,1,2,100,1,1);
 
 %[A,c,LL,Lt,gm,alpha,mu,beta,rho] = amica_hardcoded(x,2,3,3,1);
 
 %todo: A initialisierung (:,:,1) entfernen
-%tic
-[A,c,LL,Lt,gm,alpha,mu,beta,rho] = amica_a(x,1,3,1000,1);
+tic
+[A,c,LL,Lt,gm,alpha,mu,beta,rho] = amica_a(x,1,3,10000,1);
 %[A_2,c,LL_2,Lt,gm,alpha,mu,beta,rho] = amica_a(x,1,3,100,1);
 %[A_3,c,LL_3,Lt,gm,alpha,mu,beta,rho] = amica_a(x,1,3,500,1);
-%toc
-save('results_sinus_matlab_singleModel','A','LL')
+total_time = toc
+%save('../Experiments/Results/results_matlab_ssv_4model.mat','A','LL','total_time')
 %{
 tiledlayout(4,1)
 

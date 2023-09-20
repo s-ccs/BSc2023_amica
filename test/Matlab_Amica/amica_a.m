@@ -203,7 +203,9 @@ switch fix_inits %0=random, 1=from file, 2=fixed value(a bad one)
         %load("supersmall_data.mat", "mu_init")
         %load("pink_sinus_data.mat", "mu_init")
         load("eeg_data.mat", "mu_init")
-        %load("sinus_multimodel_data.mat", "mu_init")
+        %load("../Experiments/TestData/eeg_4model.mat", "mu_init")
+        %load("sinus_multimodel_data.mat", "mu_init"
+        %load("../Experiments/TestData/eeg_10model.mat", "mu_init")
         mu = mu_init;
     
         %load("unit_test_data.mat", "beta_init")
@@ -211,14 +213,18 @@ switch fix_inits %0=random, 1=from file, 2=fixed value(a bad one)
         %load("supersmall_data.mat", "beta_init")
         %load("pink_sinus_data.mat", "beta_init")
         load("eeg_data.mat", "beta_init")
+        %load("../Experiments/TestData/eeg_4model.mat", "beta_init")
         %load("sinus_multimodel_data.mat", "beta_init")
+        %load("../Experiments/TestData/eeg_10model.mat", "beta_init")
         beta = beta_init;
     
         %load("pink_sinus_data.mat", "A_init")
         %load("supersmall_data.mat", "A_init")
         %load("breakit_data.mat", "A_init")
         load("eeg_data.mat", "A_init")
+        %load("../Experiments/TestData/eeg_4model.mat", "A_init")
         %load("sinus_multimodel_data.mat", "A_init")
+        %load("../Experiments/TestData/eeg_10model.mat", "A_init")
         if M == 1
             A = A_init(:,:,1);
         else
@@ -329,6 +335,9 @@ for iter = 1:maxiter
     
     if iter > iterwin + 1
         sdll = sum(dLL(iter-iterwin+1:iter))/iterwin;
+        if (iter == 1430)
+            nothing
+        end
         if (sdll > 0) && (sdll < mindll)
             break
         end
