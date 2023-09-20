@@ -35,15 +35,15 @@ x_unmixed[:,500:1000] = pinv(A2)*x[:,500:1000]
 #_____________________________________________
 #_____________________________________________
 #get eeg data
-# data_path = pyconvert(String,@py(str(PyMNE.datasets.ssvep.data_path())))
-# bids_fname =  joinpath(data_path,"sub-02","ses-01","eeg","sub-02_ses-01_task-ssvep_eeg.vhdr")
+data_path = pyconvert(String,@py(str(PyMNE.datasets.ssvep.data_path())))
+bids_fname =  joinpath(data_path,"sub-02","ses-01","eeg","sub-02_ses-01_task-ssvep_eeg.vhdr")
 
 
-# raw = PyMNE.io.read_raw_brainvision(bids_fname, preload=true, verbose=false)
-# raw.resample(128)
-# raw.filter(l_freq=1, h_freq=nothing, fir_design="firwin")
-# x = pyconvert(Array,raw.get_data(;units="uV"))
-#_____________________________________________
+raw = PyMNE.io.read_raw_brainvision(bids_fname, preload=true, verbose=false)
+raw.resample(128)
+raw.filter(l_freq=1, h_freq=nothing, fir_design="firwin")
+x = pyconvert(Array,raw.get_data(;units="uV"))
+_____________________________________________
 
 #initialise random parameters (A, beta, mu) before saving them
 beta = ones(m, n, M) + 0.1 * randn(m, n, M)

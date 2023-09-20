@@ -1,64 +1,73 @@
-import Amica
-using Amica
+#import Amica
+#using Amica
 using CairoMakie
-using MAT
-using LinearAlgebra
+#using MAT
+#using LinearAlgebra
 #using GaussianMixtures
-using Distributions: mean
+# using Distributions: mean
+# using TransferEntropy
 #using SpecialFunctions
 #using ComponentArrays
 #using Diagonalizations
 
-function mean_squared_error(A,B)
-    squared_error = (A .- B) .^ 2
-    mse = mean(squared_error)
-    return mse
-end
-#Note: time and iterations(julia): Minimizing 1429  Time: 0 Time: 0:45:15 ( 1.90  s/it)
-#load data set
-file = matopen("test/eeg_data.mat")
-x = read(file, "x")
-close(file)
-#load julia results
-file = matopen("test/results_ssv_julia_singlemodel.mat")
-julia_A = read(file,"A")
-julia_LL = read(file,"LL")
-close(file)
-#load matlab results
+ml_m1_1t = 246.8946/100
+ml_m2_1t = 496.0950/100
+ml_m4_1t = 988.3812/100
+#ml_m10_1t = 0
+ml_1t = [ml_m1_1t, ml_m2_1t, ml_m4_1t]
 
-#---
-f = Figure(resolution = (1300, 500))
-series(f[1,1],s[:,1:100])
-series(f[1,2],s[:,900:1000])
+ml_m1_64t = 125.1965/100
+ml_m2_64t = 275.0308/100
+ml_m4_64t = 561.6809/100
+#ml_m10_64t = 1.3560*1000
+ml_64t = [ml_m1_64t, ml_m2_64t, ml_m4_64t]
 
-series(f[2,1],x[:,1:100])
-series(f[2,2],x[:,900:1000])
+j_m1_1t = 203/100
+j_m2_1t = 411/100
+j_m4_1t = 813.351843/100
+#j_m10_1t = 0
+j_1t = [j_m1_1t, j_m2_1t, j_m4_1t]
+
+j_m1_64t = 190.505351/100
+j_m2_64t = 406.222596/100
+j_m4_64t = 812.646886/100
+#j_m10_64t = 0
+j_64t = [j_m1_64t, j_m2_64t, j_m4_64t]
+
+f_m1_1t = (26.546+27.321+27.157)/3/100
+f_m2_1t = (53.813 +52.714+53.446)/3/100
+f_m4_1t = (106.607+ 105.816+ 106.050)/3/100
+#f_m10_1t = 0
+f_1t = [f_m1_1t, f_m2_1t, f_m4_1t]
+
+f_m1_64t = (31.557 + 31.523 + 31.469)/3/100
+f_m2_64t = (62.310 + 62.032 +62.420)/3/100
+f_m4_64t = (122.536 + 121.552 + 122.128)/3/100
+#f_m10_64t = 0
+f_64t = [f_m1_64t, f_m2_64t, f_m4_64t]
+
+#-----
+f= Figure()
+xs = [1,2,4]
+ax = Axis(f[1, 1], xlabel = "Number of models", ylabel = "Time (s/iteration)", title = "Single Thread")
+sca = scatter!(xs, ml_1t, color = :red)
+sca2 = scatter!(xs, j_1t, color = :blue)
+sca3 = scatter!(xs, f_1t, color = :green)
+
+Legend(f[1, 2],
+    [sca, sca2, sca3],
+    ["MATLAB", "Julia", "Fortran"])
 f
-#--------
-f2 = Figure(resolution = (1300, 500))
-series(f2[1,1],pinv(am.models[1].A)*x[:,1:100])
-series(f2[1,2],pinv(am.models[2].A)*x[:,900:1000])
+#-----
+f2= Figure()
+xs = [1,2,4]
+ax = Axis(f2[1, 1], xlabel = "Number of models", ylabel = "Time (s/iteration)", title = "64 Threads")
+sca4 = scatter!(xs, ml_64t, color = :red)
+sca5 = scatter!(xs, j_64t, color = :blue)
+sca6 = scatter!(xs, f_64t, color = :green)
 
-series(f2[2,1],pinv(matlab_A1)*x[:,1:100])
-series(f2[2,2],pinv(matlab_A2)*x[:,900:1000])
+Legend(f2[1, 2],
+    [sca4, sca5, sca6],
+    ["MATLAB", "Julia", "Fortran"])
 f2
-#-----------
-f3 = Figure(resolution = (1300, 500))
-lines(f3[1,1],am.LL)
-lines(f3[1,2],vec(matlab_LL))
-f3
-#-----------
-f4 = Figure(resolution = (1300, 250))
-series(f4[1,1],pinv(am.models[2].A)*x[:,1:100])
-series(f4[1,2],pinv(am.models[1].A)*x[:,900:1000])
-f4
-#colsize!(f3.layout, 1, Aspect(1, 1.0))
-#supertitle = Label(f[6,2], "HIII", fontsize = 20)
-#----
-#___________________________________________________________
-# file = matopen("test/sinus_multimodel_data.mat")
-# A_original = read(file, "A")
-# close(file)
-# series(f[5,1],pinv(A_original)*x[:,1:100])
-# series(f[6,1],pinv(am.models[2].A)*x[:,1:100])
-# series(f[6,2],pinv(am.models[1].A)*x[:,900:1000])
+#------
