@@ -14,11 +14,11 @@ load("eeg_data.mat", "x") %also change in amica.m!!!
 %[A,c,LL,Lt,gm,alpha,mu,beta,rho] = amica_hardcoded(x,2,3,3,1);
 
 tic
-[A,c,LL,Lt,gm,alpha,mu,beta,rho] = amica_a(x,1,3,2000,1);
+[A,c,LL,Lt,gm,alpha,mu,beta,rho] = amica_a(x,1,3,10000,1);
 %[A_2,c,LL_2,Lt,gm,alpha,mu,beta,rho] = amica_a(x,1,3,100,1);
 %[A_3,c,LL_3,Lt,gm,alpha,mu,beta,rho] = amica_a(x,1,3,500,1);
-toc
-%save('results_sinus_matlab_MultiModel','A','LL')
+total_time = toc
+%save('results_ssv_matlab_singlemodel','A','LL','total_time')
 %{
 tiledlayout(4,1)
 
