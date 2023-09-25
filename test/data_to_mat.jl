@@ -43,11 +43,7 @@ raw = PyMNE.io.read_raw_brainvision(bids_fname, preload=true, verbose=false)
 raw.resample(128)
 raw.filter(l_freq=1, h_freq=nothing, fir_design="firwin")
 x = pyconvert(Array,raw.get_data(;units="uV"))
-<<<<<<< HEAD
-_____________________________________________
-=======
 #_____________________________________________
->>>>>>> ed70db8f5c19a91c342bc7b399b415151a937efc
 
 #initialise random parameters (A, beta, mu) before saving them
 (n,N) = size(x)
