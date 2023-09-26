@@ -18,7 +18,7 @@ which will make it easy to replace certain components of the algorithm to find b
 ## Instruction for a new student
 To run Amica.jl, you will need Julia: https://julialang.org/
 
-Please follow the following steps to test the Amica algorithm:
+Follow these steps in order to test the Amica algorithm:
 1. Open a terminal
 
 2. Download Amica.jl from https://github.com/s-ccs/Amica.jl
@@ -37,11 +37,13 @@ Please follow the following steps to test the Amica algorithm:
 7. Check if all packages have been succesfully installed
 
          pkg> status
-8. Run the run_amica.jl script
+         
+8. Leave the package manager by typing `Backspace`
+9. Run the run_amica.jl script
 
          julia> include("/path/to/Amica.jl/test/run_amica.jl")
-9. The project will now precompile. This might take a while.
-10. You can now inspect the results of the algorithm by calling the the fields of the Amica object `am`. E.g. to get the unmixing matrix A, type
+10. The project will now precompile. This might take a while.
+11. You can now inspect the results of the algorithm by calling the the fields of the Amica object `am`. E.g. to get the unmixing matrix A, type
 
          julia> am.A
 The fields of the Amica object are defined in `src/types.jl`.
