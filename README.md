@@ -13,10 +13,10 @@ thesis aims to produce an implementation in the scientific programming language 
 which will make it easy to replace certain components of the algorithm to find better performing variations.
 
 ## Bibliography
->For bibliography please look for the `Bib`-File in the `report` folder
+>See `Bib`-File in `report` folder.
 
 ## Instruction for a new student
-To run Amica.jl, you will need Julia: https://julialang.org/
+To run Amica.jl, you will need Julia: https://julialang.org/\
 Please follow the following steps to test the Amica algorithm:
 1. Open a terminal
 
@@ -44,14 +44,14 @@ Please follow the following steps to test the Amica algorithm:
 
          julia> am.A
 The fields of the Amica object are defined in `src/types.jl`.
-You can experiment with Amica.jl by trying to run it as SingleModel/MultiModel algorithm or by switching up different parameters. The easiest way to do this is by editing the `run_amica.jl` script.
+You can experiment with Amica.jl by trying to run it as SingleModel/MultiModel algorithm or by switching up different parameters. The easiest way to do this is by editing the `run_amica.jl` script.\
 Generally, performing the algorithm on given data `x` can be done by using the `fit` function to create an Amica object. You will need to specify whether the algorithm should be performed as SingleModel or MultiModel, e.g.
 
          obj = fit(SingleModelAmica, x)
 Additional parameters can be given, like for example the maximum amount of iterations or the number of generalized Gaussians for the Gaussian mixture models.
 
         obj = fit(SingleModelAmica, x; maxiter = 100, m = 3)
-For all possible parameters and their default values, please check the `fit` and `amica!` functions in `/src/main.jl`.
+For all possible parameters and their default values, please check the `fit` and `amica!` functions in `/src/main.jl`.\
 A neat feature is the ability to pass initial values for parameters which would otherwise be initialized randomly. This is very useful for running performance evaluations.
 
 ## Overview of Folder Structure 
