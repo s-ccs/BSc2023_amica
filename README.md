@@ -43,7 +43,7 @@ Follow these steps in order to test the Amica algorithm:
 
          julia> include("/path/to/Amica.jl/test/run_amica.jl")
 10. The project will now precompile. This might take a while.
-11. You can now inspect the results of the algorithm by calling the the fields of the Amica object `am`. E.g. to get the unmixing matrix A, type
+11. You can now inspect the results of the algorithm by calling the fields of the Amica object `am`. E.g. to get the unmixing matrix A, type
 
          julia> am.A
 The fields of the Amica object are defined in `src/types.jl`.
