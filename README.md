@@ -12,15 +12,47 @@ performing ICA algorithms. However, the current implementations are not transpar
 thesis aims to produce an implementation in the scientific programming language Julia. The implementation will feature a modular structure,
 which will make it easy to replace certain components of the algorithm to find better performing variations.
 
-## Zotero Library Path
->TODO: Please provide the link to the Zotero group here or include a `Bib`-File in the `report` folder
+##Bibliography
+>For bibliography please look for the `Bib`-File in the `report` folder
 
 ## Instruction for a new student
->TODO: If a fellow student wants to reproduce all your results. What scripts, in which order, with which data need to be run?
->
->Be as specific as possible. Plan to spend **at least 1h** on this.
->
->Optional: Add a pipeline plot in which the different steps are displayed together with the corresponding scripts.
+To run Amica.jl, you will need Julia: https://julialang.org/
+Please follow the following steps to test the Amica algorithm:
+1. Open a terminal
+
+2. Download Amica.jl from https://github.com/s-ccs/Amica.jl
+
+         > git clone https://github.com/s-ccs/Amica.jl
+3. Start Julia
+
+         > julia
+4. Switch to the package manager Pkg by typing `]`
+5. Activate the project environment by providing the path to Amica.jl
+
+         pkg> activate ~/Path/to/Amica.jl
+6. Download the required packages
+
+         pkg> instantiate
+7. Check if all packages have been succesfully installed
+
+         pkg> status
+8. Run the run_amica.jl script
+
+         julia> include("/path/to/Amica.jl/test/run_amica.jl")
+9. The project will now precompile. This might take a while.
+10. You can now inspect the results of the algorithm by calling the the fields of the Amica object `am`. E.g. to get the unmixing matrix A, type
+
+         julia> am.A
+The fields of the Amica object are defined in `src/types.jl`.
+You can experiment with Amica.jl by trying to run it as SingleModel/MultiModel algorithm or by switching up different parameters. The easiest way to do this is by editing the `run_amica.jl` script.
+Generally, performing the algorithm on given data `x` can be done by using the `fit` function to create an Amica object. You will need to specify whether the algorithm should be performed as SingleModel or MultiModel, e.g.
+
+         obj = fit(SingleModelAmica, x)
+Additional parameters can be given, like for example the maximum amount of iterations or the number of generalized Gaussians for the Gaussian mixture models.
+
+        obj = fit(SingleModelAmica, x; maxiter = 100, m = 3)
+For all possible parameters and their default values, please check the `fit` and `amica!` functions in `/src/main.jl`.
+A neat feature is the ability to pass initial values for parameters which would otherwise be initialized randomly. This is very useful for running performance evaluations.
 
 ## Overview of Folder Structure 
 

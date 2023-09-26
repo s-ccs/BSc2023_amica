@@ -1,19 +1,5 @@
-Scripts etc. - everything that runs something on it's own and is not a function, goes here.
-
-Please use easily understandable filenames
-
-E.g.
-```
-Fig1_simulateSimulation.jl
-Results_analysisOfHairColor.jl
-Results_tableResultSizeCalculation.jl
-```
-
-or what could also work
-```
-01_loadAndPreprocessData.jl
-02_generateFilteredVersion.jl
-03_analyseERPsForSaccadeAmplitude.jl
-```
-
-But please choose one way to present your scripts and keep with it. If you wonder if it is a good idea to edit this Readme.md to decsribe what each script does. **Yes it is!**
+`run_amica.jl` - Test script to run AMICA on synthetic data and plot the results.
+`test_single_sinus.jl` - Script to run SingleModel AMICA on synthetic data and compare results with results from MATLAB implementation.
+MATLAB.
+`test_multi_sinus.jl` - Script to run MultiModel AMICA on synthetic data and compare results with results from MATLAB implementation.
+`test_ssv_data.jl` - Plots results from experiments comparing Julia, MATLAB and Fortran implementations with 1 or 64 threads and 1, 2 and 4 ICA mixture models.
