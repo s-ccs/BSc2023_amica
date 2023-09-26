@@ -12,7 +12,7 @@ performing ICA algorithms. However, the current implementations are not transpar
 thesis aims to produce an implementation in the scientific programming language Julia. The implementation will feature a modular structure,
 which will make it easy to replace certain components of the algorithm to find better performing variations.
 
-##Bibliography
+## Bibliography
 >For bibliography please look for the `Bib`-File in the `report` folder
 
 ## Instruction for a new student
